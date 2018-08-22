@@ -224,7 +224,7 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdlib.h>]],[[return posix_memalign(
                [AC_DEFINE(HAVE_POSIX_MEMALIGN, 1, [Define if we have posix_memalign])])
 
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <string.h>]],[[int x[1]; memset_s(x, 1, 0, 1)]])],
-               [AC_DEFINE(HAVE_MEMSET_S, 1, [Define if we have memset_s])])
+               [AC_DEFINE(HAVE_MEMSET_S, 0, [Define if we have memset_s])])
 
 AC_CHECK_HEADERS([byteswap.h, sys/mman.h])
 
