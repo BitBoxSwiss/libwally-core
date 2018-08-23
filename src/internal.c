@@ -171,16 +171,12 @@ int wally_hash160(const unsigned char *bytes, size_t bytes_len,
 
 static void wally_internal_bzero(void *dest, size_t len)
 {
-#ifdef HAVE_MEMSET_S
-    memset_s(dest, len, 0, len);
-#else
     memset(dest, 0, len);
 #if 0
     /* This is used by boringssl to prevent memset from being elided. It
      * works by forcing a memory barrier and so can be slow.
      */
     __asm__ __volatile__ ("" : : "r" (dest) : "memory");
-#endif
 #endif
 }
 
