@@ -40,10 +40,14 @@ int SHA_POST(wally_pbkdf2_hmac_)(const unsigned char *pass, size_t pass_len,
     salt_len += PBKDF2_HMAC_EXTRA_LEN;
 
     /* If bytes out is suitably aligned, we can work on it directly */
-    if (alignment_ok(bytes_out, sizeof(SHA_ALIGN_T)))
+    if (alignment_ok(bytes_out, sizeof(SHA_ALIGN_T))) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
         sha_cp = (struct SHA_T *)bytes_out;
-    else
+#pragma GCC diagnostic pop
+    } else {
         sha_cp = &d2;
+    }
 
     for (n = 0; n < len / PBKDF2_HMAC_SHA_LEN; ++n) {
         beint32_t block = cpu_to_be32(n + 1); /* Block number */

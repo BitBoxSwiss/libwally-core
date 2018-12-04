@@ -286,9 +286,12 @@ static void add(struct ripemd160_ctx *ctx, const void *p, size_t len)
 
 	while (len >= 64) {
 		/* Process full chunks directly from the source. */
-		if (alignment_ok(data, sizeof(uint32_t)))
+		if (alignment_ok(data, sizeof(uint32_t))) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
 			Transform(ctx->s, (const uint32_t *)data);
-		else {
+#pragma GCC diagnostic pop
+        } else {
 			memcpy(ctx->buf.u8, data, sizeof(ctx->buf));
 			Transform(ctx->s, ctx->buf.u32);
 		}
@@ -296,7 +299,7 @@ static void add(struct ripemd160_ctx *ctx, const void *p, size_t len)
 		data += 64;
 		len -= 64;
 	}
-	    
+
 	if (len) {
 		/* Fill the buffer with what remains. */
 		memcpy(ctx->buf.u8 + bufsize, data, len);
@@ -342,7 +345,7 @@ void ripemd160(struct ripemd160 *ripemd, const void *p, size_t size)
 	ripemd160_done(&ctx, ripemd);
 	CCAN_CLEAR_MEMORY(&ctx, sizeof(ctx));
 }
-	
+
 void ripemd160_u8(struct ripemd160_ctx *ctx, uint8_t v)
 {
 	ripemd160_update(ctx, &v, sizeof(v));
@@ -369,13 +372,13 @@ void ripemd160_le16(struct ripemd160_ctx *ctx, uint16_t v)
 	leint16_t lev = cpu_to_le16(v);
 	ripemd160_update(ctx, &lev, sizeof(lev));
 }
-	
+
 void ripemd160_le32(struct ripemd160_ctx *ctx, uint32_t v)
 {
 	leint32_t lev = cpu_to_le32(v);
 	ripemd160_update(ctx, &lev, sizeof(lev));
 }
-	
+
 void ripemd160_le64(struct ripemd160_ctx *ctx, uint64_t v)
 {
 	leint64_t lev = cpu_to_le64(v);
@@ -388,13 +391,13 @@ void ripemd160_be16(struct ripemd160_ctx *ctx, uint16_t v)
 	beint16_t bev = cpu_to_be16(v);
 	ripemd160_update(ctx, &bev, sizeof(bev));
 }
-	
+
 void ripemd160_be32(struct ripemd160_ctx *ctx, uint32_t v)
 {
 	beint32_t bev = cpu_to_be32(v);
 	ripemd160_update(ctx, &bev, sizeof(bev));
 }
-	
+
 void ripemd160_be64(struct ripemd160_ctx *ctx, uint64_t v)
 {
 	beint64_t bev = cpu_to_be64(v);
