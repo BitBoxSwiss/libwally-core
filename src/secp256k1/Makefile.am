@@ -161,11 +161,6 @@ gen_%.o: src/gen_%.c
 $(gen_context_BIN): $(gen_context_OBJECTS)
 	$(CC_FOR_BUILD) $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD) $^ -o $@
 
-$(libsecp256k1_la_OBJECTS): src/ecmult_static_context.h
-$(tests_OBJECTS): src/ecmult_static_context.h
-$(bench_internal_OBJECTS): src/ecmult_static_context.h
-$(bench_ecmult_OBJECTS): src/ecmult_static_context.h
-
 CLEANFILES = $(gen_context_BIN) $(JAVAROOT)/$(JAVAORG)/*.class .stamp-java
 endif
 
