@@ -166,10 +166,7 @@ $(tests_OBJECTS): src/ecmult_static_context.h
 $(bench_internal_OBJECTS): src/ecmult_static_context.h
 $(bench_ecmult_OBJECTS): src/ecmult_static_context.h
 
-src/ecmult_static_context.h: $(gen_context_BIN)
-	./$(gen_context_BIN)
-
-CLEANFILES = $(gen_context_BIN) src/ecmult_static_context.h $(JAVAROOT)/$(JAVAORG)/*.class .stamp-java
+CLEANFILES = $(gen_context_BIN) $(JAVAROOT)/$(JAVAORG)/*.class .stamp-java
 endif
 
 EXTRA_DIST = autogen.sh src/gen_context.c src/basic-config.h $(JAVA_FILES)
