@@ -284,6 +284,12 @@ size_t varbuff_to_bytes(const unsigned char *bytes, size_t bytes_len,
     return n + bytes_len;
 }
 
+size_t wally_varbuff_to_bytes(const unsigned char *bytes, size_t bytes_len,
+                              unsigned char *bytes_out)
+{
+    return varbuff_to_bytes(bytes, bytes_len, bytes_out);
+}
+
 size_t confidential_value_to_bytes(const unsigned char *bytes, size_t bytes_len,
                                    unsigned char *bytes_out)
 {
