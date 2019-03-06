@@ -422,6 +422,11 @@ WALLY_CORE_API int wally_witness_program_from_bytes(
     size_t len,
     size_t *written);
 
+WALLY_CORE_API size_t wally_varbuff_to_bytes(
+    const unsigned char *bytes,
+    size_t bytes_len,
+    unsigned char *bytes_out);
+
 #ifdef BUILD_ELEMENTS
 /**
  * Create a pegout script.
@@ -481,4 +486,3 @@ WALLY_CORE_API int wally_elements_pegin_contract_script_from_bytes(
 #endif
 
 #endif /* LIBWALLY_CORE_SCRIPT_H */
-
