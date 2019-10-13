@@ -29,7 +29,8 @@ SECP256K1_API int secp256k1_ecdsa_s2c_sign(
     secp256k1_s2c_opening *s2c_opening,
     const unsigned char *msg32,
     const unsigned char *seckey,
-    const unsigned char* s2c_data32
+    const unsigned char* s2c_data32,
+    int *recid
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(4) SECP256K1_ARG_NONNULL(5);
 
 /** Verify a sign-to-contract commitment.

@@ -9,11 +9,11 @@
 
 #include "include/secp256k1_ecdsa_sign_to_contract.h"
 
-int secp256k1_ecdsa_s2c_sign(const secp256k1_context *ctx, secp256k1_ecdsa_signature *signature, secp256k1_s2c_opening *s2c_opening, const unsigned char *msg32, const unsigned char *seckey, const unsigned char* s2c_data32) {
+int secp256k1_ecdsa_s2c_sign(const secp256k1_context *ctx, secp256k1_ecdsa_signature *signature, secp256k1_s2c_opening *s2c_opening, const unsigned char *msg32, const unsigned char *seckey, const unsigned char* s2c_data32, int *recid) {
     secp256k1_scalar r, s;
     int ret;
     ARG_CHECK(signature != NULL);
-    ret = secp256k1_ecdsa_sign_helper(ctx, &r, &s, s2c_opening, msg32, seckey, s2c_data32, NULL, NULL, NULL);
+    ret = secp256k1_ecdsa_sign_helper(ctx, &r, &s, s2c_opening, msg32, seckey, s2c_data32, NULL, NULL, recid);
     if (ret) {
         secp256k1_ecdsa_signature_save(signature, &r, &s);
     } else {
