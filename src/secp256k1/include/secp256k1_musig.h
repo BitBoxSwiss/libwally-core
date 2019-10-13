@@ -1,6 +1,10 @@
 #ifndef SECP256K1_MUSIG_H
 #define SECP256K1_MUSIG_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 
 /** This module implements a Schnorr-based multi-signature scheme called MuSig
@@ -269,7 +273,7 @@ SECP256K1_API int secp256k1_musig_session_combine_nonces(
     size_t n_signers,
     int *nonce_is_negated,
     const secp256k1_pubkey *adaptor
-) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(4);
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3);
 
 /** Sets the message of a session if previously unset
  *
@@ -366,13 +370,20 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_musig_partial_sig_verif
  *  Out:          sig: complete signature (cannot be NULL)
  *  In:  partial_sigs: array of partial signatures to combine (cannot be NULL)
  *             n_sigs: number of signatures in the partial_sigs array
+ *            tweak32: if `combined_pk` was tweaked with `ec_pubkey_tweak_add` after
+ *                     `musig_pubkey_combine` and before `musig_session_initialize` then
+ *                     the same tweak must be provided here in order to get a valid
+ *                     signature for the tweaked key. Otherwise `tweak` should be NULL.
+ *                     If the tweak is larger than the group order or 0 this function will
+ *                     return 0. (can be NULL)
  */
 SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_musig_partial_sig_combine(
     const secp256k1_context* ctx,
     const secp256k1_musig_session *session,
     secp256k1_schnorrsig *sig,
     const secp256k1_musig_partial_signature *partial_sigs,
-    size_t n_sigs
+    size_t n_sigs,
+    const unsigned char *tweak32
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4);
 
 /** Converts a partial signature to an adaptor signature by adding a given secret
@@ -418,5 +429,9 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_musig_extract_secret_ad
     size_t n_partial_sigs,
     int nonce_is_negated
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
