@@ -2521,6 +2521,85 @@ void run_ec_combine(void) {
     }
 }
 
+int test_ec_commit_seckey(unsigned char *seckey, secp256k1_pubkey *commitment) {
+    /* Return if seckey is the discrete log of commitment */
+    secp256k1_pubkey pubkey_tmp;
+    return secp256k1_ec_pubkey_create(ctx, &pubkey_tmp, seckey) == 1
+           && memcmp(&pubkey_tmp, commitment, sizeof(pubkey_tmp)) == 0;
+}
+
+void test_ec_commit(void) {
+    unsigned char seckey[32];
+    secp256k1_pubkey pubkey;
+    secp256k1_pubkey commitment;
+    unsigned char data[32];
+
+    /* Create random keypair and data */
+    secp256k1_rand256(seckey);
+    CHECK(secp256k1_ec_pubkey_create(ctx, &pubkey, seckey));
+    secp256k1_rand256_test(data);
+
+    /* Commit to data and verify */
+    CHECK(secp256k1_ec_commit(ctx, &commitment, &pubkey, data, 32));
+    CHECK(secp256k1_ec_commit_verify(ctx, &commitment, &pubkey, data, 32));
+    CHECK(secp256k1_ec_commit_seckey(ctx, seckey, &pubkey, data, 32));
+    CHECK(test_ec_commit_seckey(seckey, &commitment) == 1);
+
+    /* Check that verification fails with different data */
+    CHECK(secp256k1_ec_commit_verify(ctx, &commitment, &pubkey, data, 31) == 0);
+}
+
+void test_ec_commit_api(void) {
+    unsigned char seckey[32];
+    secp256k1_pubkey pubkey;
+    secp256k1_pubkey commitment;
+    unsigned char data[32];
+
+    memset(data, 23, sizeof(data));
+
+    /* Create random keypair */
+    secp256k1_rand256(seckey);
+    CHECK(secp256k1_ec_pubkey_create(ctx, &pubkey, seckey));
+
+    CHECK(secp256k1_ec_commit(ctx, &commitment, &pubkey, data, 1) == 1);
+    /* The same pubkey can be both input and output of the function */
+    {
+        secp256k1_pubkey pubkey_tmp = pubkey;
+        CHECK(secp256k1_ec_commit(ctx, &pubkey_tmp, &pubkey_tmp, data, 1) == 1);
+        CHECK(memcmp(commitment.data, pubkey_tmp.data, sizeof(commitment.data)) == 0);
+    }
+
+    /* If the pubkey is not provided it will be computed from seckey */
+    CHECK(secp256k1_ec_commit_seckey(ctx, seckey, NULL, data, 1) == 1);
+    CHECK(test_ec_commit_seckey(seckey, &commitment) == 1);
+    /* pubkey is not provided but seckey overflows */
+    {
+        unsigned char overflowed_seckey[32];
+        memset(overflowed_seckey, 0xFF, sizeof(overflowed_seckey));
+        CHECK(secp256k1_ec_commit_seckey(ctx, overflowed_seckey, NULL, data, 1) == 0);
+    }
+
+    CHECK(secp256k1_ec_commit_verify(ctx, &commitment, &pubkey, data, 1) == 1);
+
+    /* Commitment to 0-len data should fail */
+    CHECK(secp256k1_ec_commit(ctx, &commitment, &pubkey, data, 0) == 0);
+    CHECK(secp256k1_ec_commit_verify(ctx, &commitment, &pubkey, data, 0) == 0);
+    CHECK(memcmp(&pubkey.data, &commitment.data, sizeof(pubkey.data)) == 0);
+    {
+        unsigned char seckey_tmp[32];
+        memcpy(seckey_tmp, seckey, 32);
+        CHECK(secp256k1_ec_commit_seckey(ctx, seckey_tmp, &pubkey, data, 0) == 0);
+    }
+}
+
+void run_ec_commit(void) {
+    int i;
+    for (i = 0; i < count * 8; i++) {
+         test_ec_commit();
+    }
+    test_ec_commit_api();
+}
+
 void test_group_decompress(const secp256k1_fe* x) {
     /* The input itself, normalized. */
     secp256k1_fe fex = *x;
@@ -3232,7 +3311,7 @@ void test_ecmult_multi_batching(void) {
     data.pt = pt;
     secp256k1_gej_neg(&r2, &r2);
 
-    /* Test with empty scratch space. It should compute the correct result using 
+    /* Test with empty scratch space. It should compute the correct result using
      * ecmult_mult_simple algorithm which doesn't require a scratch space. */
     scratch = secp256k1_scratch_create(&ctx->error_callback, 0);
     CHECK(secp256k1_ecmult_multi_var(&ctx->error_callback, &ctx->ecmult_ctx, scratch, &r, &scG, ecmult_multi_callback, &data, n_points));
@@ -4258,6 +4337,59 @@ void run_eckey_edge_case_test(void) {
     CHECK(memcmp(&pubkey, zeros, sizeof(secp256k1_pubkey)) > 0);
     CHECK(ecount == 3);
     secp256k1_context_set_illegal_callback(ctx, NULL, NULL);
+}
+
+
+void run_s2c_opening_test(void) {
+    int i = 0;
+    unsigned char output[34];
+    unsigned char input[34] = {
+            0x01,
+            0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x02
+    };
+    secp256k1_s2c_opening opening;
+    size_t ecount = 0;
+
+    secp256k1_context_set_illegal_callback(ctx, counting_illegal_callback_fn, &ecount);
+
+    /* Uninitialized opening can't be serialized. Actually testing that would be
+     * undefined behavior. Therefore we simulate it by setting the opening to 0. */
+    memset(&opening, 0, sizeof(opening));
+    CHECK(ecount == 0);
+    CHECK(secp256k1_s2c_opening_serialize(ctx, output, &opening) == 0);
+    CHECK(ecount == 1);
+
+    /* First parsing, then serializing works */
+    CHECK(secp256k1_s2c_opening_parse(ctx, &opening, input) == 1);
+    CHECK(secp256k1_s2c_opening_serialize(ctx, output, &opening) == 1);
+
+    {
+        /* Invalid pubkey makes parsing fail */
+        unsigned char input_tmp[34];
+        memcpy(input_tmp, input, sizeof(input_tmp));
+        input_tmp[33] = 0;
+        CHECK(secp256k1_s2c_opening_parse(ctx, &opening, input_tmp) == 0);
+    }
+
+    /* Try parsing and serializing a bunch of openings */
+    do {
+        /* This is expected to fail in about 50% of iterations because the
+         * points' x-coordinates are uniformly random */
+        if (secp256k1_s2c_opening_parse(ctx, &opening, input) == 1) {
+            CHECK(secp256k1_s2c_opening_serialize(ctx, output, &opening) == 1);
+            CHECK(memcmp(output, input, 34) == 0);
+        }
+        secp256k1_rand256(input);
+        /* nonce_is_negated */
+        input[0] = input[0] & 1;
+        /* oddness */
+        input[1] = (input[1] % 2) + 2;
+        i++;
+    } while(i < count);
 }
 
 void random_sign(secp256k1_scalar *sigr, secp256k1_scalar *sigs, const secp256k1_scalar *key, const secp256k1_scalar *msg, int *recid) {
@@ -5330,6 +5462,10 @@ void run_ecdsa_openssl(void) {
 # include "modules/recovery/tests_impl.h"
 #endif
 
+#ifdef ENABLE_MODULE_ECDSA_SIGN_TO_CONTRACT
+# include "modules/ecdsa_sign_to_contract/tests_impl.h"
+#endif
+
 #ifdef ENABLE_MODULE_GENERATOR
 # include "modules/generator/tests_impl.h"
 #endif
@@ -5439,6 +5575,7 @@ int main(int argc, char **argv) {
     run_ecmult_const_tests();
     run_ecmult_multi_tests();
     run_ec_combine();
+    run_ec_commit();
 
     /* endomorphism tests */
 #ifdef USE_ENDOMORPHISM
@@ -5450,6 +5587,8 @@ int main(int argc, char **argv) {
 
     /* EC key edge cases */
     run_eckey_edge_case_test();
+
+    run_s2c_opening_test();
 
 #ifdef ENABLE_MODULE_ECDH
     /* ecdh tests */

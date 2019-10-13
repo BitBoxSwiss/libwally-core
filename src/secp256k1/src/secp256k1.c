@@ -480,44 +480,14 @@ const secp256k1_nonce_function secp256k1_nonce_function_bipschnorr = nonce_funct
 const secp256k1_nonce_function secp256k1_nonce_function_rfc6979 = nonce_function_rfc6979;
 const secp256k1_nonce_function secp256k1_nonce_function_default = nonce_function_rfc6979;
 
+/* TODO: re-order functions in this file so forward declarations are not needed? */
+static int secp256k1_ecdsa_sign_helper(const secp256k1_context *ctx, secp256k1_scalar *r, secp256k1_scalar *s, secp256k1_s2c_opening *s2c_opening, const unsigned char *msg32, const unsigned char *seckey, const unsigned char* s2c_data32, secp256k1_nonce_function noncefp, const void* noncedata, int *recid);
+
 int secp256k1_ecdsa_sign(const secp256k1_context* ctx, secp256k1_ecdsa_signature *signature, const unsigned char *msg32, const unsigned char *seckey, secp256k1_nonce_function noncefp, const void* noncedata) {
     secp256k1_scalar r, s;
-    secp256k1_scalar sec, non, msg;
-    int ret = 0;
-    int overflow = 0;
-    VERIFY_CHECK(ctx != NULL);
-    ARG_CHECK(secp256k1_ecmult_gen_context_is_built(&ctx->ecmult_gen_ctx));
-    ARG_CHECK(msg32 != NULL);
+    int ret;
     ARG_CHECK(signature != NULL);
-    ARG_CHECK(seckey != NULL);
-    if (noncefp == NULL) {
-        noncefp = secp256k1_nonce_function_default;
-    }
-
-    secp256k1_scalar_set_b32(&sec, seckey, &overflow);
-    /* Fail if the secret key is invalid. */
-    if (!overflow && !secp256k1_scalar_is_zero(&sec)) {
-        unsigned char nonce32[32];
-        unsigned int count = 0;
-        secp256k1_scalar_set_b32(&msg, msg32, NULL);
-        while (1) {
-            ret = noncefp(nonce32, msg32, seckey, NULL, (void*)noncedata, count);
-            if (!ret) {
-                break;
-            }
-            secp256k1_scalar_set_b32(&non, nonce32, &overflow);
-            if (!overflow && !secp256k1_scalar_is_zero(&non)) {
-                if (secp256k1_ecdsa_sig_sign(&ctx->ecmult_gen_ctx, &r, &s, &sec, &msg, &non, NULL)) {
-                    break;
-                }
-            }
-            count++;
-        }
-        memset(nonce32, 0, 32);
-        secp256k1_scalar_clear(&msg);
-        secp256k1_scalar_clear(&non);
-        secp256k1_scalar_clear(&sec);
-    }
+    ret = secp256k1_ecdsa_sign_helper(ctx, &r, &s, NULL, msg32, seckey, NULL, noncefp, noncedata, NULL);
     if (ret) {
         secp256k1_ecdsa_signature_save(signature, &r, &s);
     } else {
@@ -715,6 +685,207 @@ int secp256k1_ec_pubkey_combine(const secp256k1_context* ctx, secp256k1_pubkey *
     return 1;
 }
 
+/* Compute an ec commitment tweak as hash(pubkey, data). */
+static int secp256k1_ec_commit_tweak(const secp256k1_context *ctx, unsigned char *tweak32, const secp256k1_pubkey *pubkey, const unsigned char *data, size_t data_size) {
+    secp256k1_ge p;
+    unsigned char rbuf[33];
+    size_t rbuf_size = sizeof(rbuf);
+    secp256k1_sha256 sha;
+
+    if (data_size == 0) {
+        /* That's probably not what the caller wanted */
+        return 0;
+    }
+    if(!secp256k1_pubkey_load(ctx, &p, pubkey)) {
+        return 0;
+    }
+    secp256k1_eckey_pubkey_serialize(&p, rbuf, &rbuf_size, 1);
+
+    secp256k1_sha256_initialize(&sha);
+    secp256k1_sha256_write(&sha, rbuf, rbuf_size);
+    secp256k1_sha256_write(&sha, data, data_size);
+    secp256k1_sha256_finalize(&sha, tweak32);
+    return 1;
+}
+
+/* Compute an ec commitment as pubkey + hash(pubkey, data)*G. */
+static int secp256k1_ec_commit(const secp256k1_context* ctx, secp256k1_pubkey *commitment, const secp256k1_pubkey *pubkey, const unsigned char *data, size_t data_size) {
+    unsigned char tweak[32];
+
+    *commitment = *pubkey;
+    if (!secp256k1_ec_commit_tweak(ctx, tweak, commitment, data, data_size)) {
+        return 0;
+    }
+    return secp256k1_ec_pubkey_tweak_add(ctx, commitment, tweak);
+}
+
+/* Compute the seckey of an ec commitment from the original secret key of the pubkey as seckey +
+ * hash(pubkey, data). */
+static int secp256k1_ec_commit_seckey(const secp256k1_context* ctx, unsigned char *seckey, const secp256k1_pubkey *pubkey, const unsigned char *data, size_t data_size) {
+    unsigned char tweak[32];
+    secp256k1_pubkey pubkey_tmp;
+
+    if (pubkey == NULL) {
+        /* Compute pubkey from seckey if not provided */
+        int overflow;
+        secp256k1_scalar x;
+        secp256k1_gej pj;
+        secp256k1_ge p;
+
+        secp256k1_scalar_set_b32(&x, seckey, &overflow);
+        if (overflow != 0) {
+            return 0;
+        }
+        secp256k1_ecmult_gen(&ctx->ecmult_gen_ctx, &pj, &x);
+        secp256k1_ge_set_gej(&p, &pj);
+        secp256k1_pubkey_save(&pubkey_tmp, &p);
+        pubkey = &pubkey_tmp;
+    }
+
+    if (!secp256k1_ec_commit_tweak(ctx, tweak, pubkey, data, data_size)) {
+        return 0;
+    }
+    return secp256k1_ec_privkey_tweak_add(ctx, seckey, tweak);
+}
+
+/* Verify an ec commitment as pubkey + hash(pubkey, data)*G ?= commitment. */
+static int secp256k1_ec_commit_verify(const secp256k1_context* ctx, const secp256k1_pubkey *commitment, const secp256k1_pubkey *pubkey, const unsigned char *data, size_t data_size) {
+    secp256k1_gej pj;
+    secp256k1_ge p;
+    secp256k1_pubkey commitment_tmp;
+
+    if (!secp256k1_ec_commit(ctx, &commitment_tmp, pubkey, data, data_size)) {
+        return 0;
+    }
+
+    /* Return commitment == commitment_tmp */
+    secp256k1_gej_set_infinity(&pj);
+    secp256k1_pubkey_load(ctx, &p, &commitment_tmp);
+    secp256k1_gej_add_ge_var(&pj, &pj, &p, NULL);
+    secp256k1_pubkey_load(ctx, &p, commitment);
+    secp256k1_ge_neg(&p, &p);
+    secp256k1_gej_add_ge_var(&pj, &pj, &p, NULL);
+    return secp256k1_gej_is_infinity(&pj);
+}
+
+static uint64_t s2c_opening_magic = 0x5d0520b8b7f2b168ULL;
+
+static void secp256k1_s2c_opening_init(secp256k1_s2c_opening *opening) {
+    opening->magic = s2c_opening_magic;
+    opening->nonce_is_negated = 0;
+}
+
+static int secp256k1_s2c_commit_is_init(const secp256k1_s2c_opening *opening) {
+    return opening->magic == s2c_opening_magic;
+}
+
+int secp256k1_s2c_opening_parse(const secp256k1_context* ctx, secp256k1_s2c_opening* opening, const unsigned char *input34) {
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(opening != NULL);
+    ARG_CHECK(input34 != NULL);
+
+    secp256k1_s2c_opening_init(opening);
+    opening->nonce_is_negated = input34[0];
+    return secp256k1_ec_pubkey_parse(ctx, &opening->original_pubnonce, &input34[1], 33);
+}
+
+int secp256k1_s2c_opening_serialize(const secp256k1_context* ctx, unsigned char *output34, const secp256k1_s2c_opening* opening) {
+    size_t outputlen = 33;
+
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(output34 != NULL);
+    ARG_CHECK(opening != NULL);
+    ARG_CHECK(secp256k1_s2c_commit_is_init(opening));
+
+    output34[0] = opening->nonce_is_negated;
+    return secp256k1_ec_pubkey_serialize(ctx, &output34[1], &outputlen, &opening->original_pubnonce, SECP256K1_EC_COMPRESSED);
+}
+
+static int secp256k1_ecdsa_sign_helper(const secp256k1_context *ctx, secp256k1_scalar *r, secp256k1_scalar *s, secp256k1_s2c_opening *s2c_opening, const unsigned char *msg32, const unsigned char *seckey, const unsigned char* s2c_data32, secp256k1_nonce_function noncefp, const void* noncedata, int *recid) {
+    secp256k1_scalar sec, non, msg;
+    int ret = 0;
+    int overflow = 0;
+    unsigned char ndata[32];
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(secp256k1_ecmult_gen_context_is_built(&ctx->ecmult_gen_ctx));
+    ARG_CHECK(msg32 != NULL);
+    ARG_CHECK(r != NULL && s != NULL);
+    ARG_CHECK(seckey != NULL);
+    if (noncefp == NULL) {
+        noncefp = secp256k1_nonce_function_default;
+    }
+    /* sign-to-contract commitments only work with the default nonce function,
+     * because we need to ensure that s2c_data is actually hashed into the nonce and
+     * not just ignored. */
+    ARG_CHECK(s2c_data32 == NULL || noncefp == secp256k1_nonce_function_default);
+    /* s2c_opening and s2c_data32 should be either both non-NULL or both NULL. */
+    ARG_CHECK((s2c_opening != NULL) == (s2c_data32 != NULL));
+    /* if s2c_data32 is not NULL, noncedata must be NULL. */
+    ARG_CHECK(s2c_data32 == NULL || noncedata == NULL);
+    if (s2c_opening != NULL) {
+        secp256k1_s2c_opening_init(s2c_opening);
+    }
+
+    if(s2c_data32 != NULL) {
+        /* Provide s2c_data32 to the the nonce function as additional data to derive the nonce
+         * from. It's hashed because it should be possible to derive nonces even if only a SHA256
+         * commitment to the data is known.  This is for example important in the
+         * anti-nonce-covert-channel protocol.
+         */
+        secp256k1_sha256 sha;
+        secp256k1_sha256_initialize(&sha);
+        secp256k1_sha256_write(&sha, s2c_data32, 32);
+        secp256k1_sha256_finalize(&sha, ndata);
+        noncedata = &ndata;
+    }
+
+    secp256k1_scalar_set_b32(&sec, seckey, &overflow);
+    /* Fail if the secret key is invalid. */
+    if (!overflow && !secp256k1_scalar_is_zero(&sec)) {
+        unsigned char nonce32[32];
+        unsigned int count = 0;
+        secp256k1_scalar_set_b32(&msg, msg32, NULL);
+        while (1) {
+            ret = noncefp(nonce32, msg32, seckey, NULL, (void*)noncedata, count);
+            if (!ret) {
+                break;
+            }
+            secp256k1_scalar_set_b32(&non, nonce32, &overflow);
+            if (!overflow && !secp256k1_scalar_is_zero(&non)) {
+                int is_zero = 0;
+                if (s2c_data32 != NULL) {
+                    secp256k1_gej nonce_pj;
+                    secp256k1_ge nonce_p;
+
+                    /* Compute original nonce commitment/pubkey */
+                    secp256k1_ecmult_gen(&ctx->ecmult_gen_ctx, &nonce_pj, &non);
+                    secp256k1_ge_set_gej(&nonce_p, &nonce_pj);
+                    secp256k1_pubkey_save(&s2c_opening->original_pubnonce, &nonce_p);
+
+                    /* Tweak nonce with s2c commitment. */
+                    if (!secp256k1_ec_commit_seckey(ctx, nonce32, &s2c_opening->original_pubnonce, s2c_data32, 32)) {
+                        return 0;
+                    }
+                    secp256k1_scalar_set_b32(&non, nonce32, &overflow);
+                    is_zero = secp256k1_scalar_is_zero(&non);
+                }
+
+                if (!overflow && !is_zero) {
+                    if (secp256k1_ecdsa_sig_sign(&ctx->ecmult_gen_ctx, r, s, &sec, &msg, &non, recid)) {
+                        break;
+                    }
+                }
+            }
+            count++;
+        }
+        memset(nonce32, 0, 32);
+        secp256k1_scalar_clear(&msg);
+        secp256k1_scalar_clear(&non);
+        secp256k1_scalar_clear(&sec);
+    }
+    return ret;
+}
+
 #ifdef ENABLE_MODULE_ECDH
 # include "modules/ecdh/main_impl.h"
 #endif
@@ -745,4 +916,8 @@ int secp256k1_ec_pubkey_combine(const secp256k1_context* ctx, secp256k1_pubkey *
 
 #ifdef ENABLE_MODULE_SURJECTIONPROOF
 # include "modules/surjection/main_impl.h"
+#endif
+
+#ifdef ENABLE_MODULE_ECDSA_SIGN_TO_CONTRACT
+# include "modules/ecdsa_sign_to_contract/main_impl.h"
 #endif

@@ -205,3 +205,7 @@ endif
 if ENABLE_MODULE_SURJECTIONPROOF
 include src/modules/surjection/Makefile.am.include
 endif
+
+if ENABLE_MODULE_ECDSA_SIGN_TO_CONTRACT
+include src/modules/ecdsa_sign_to_contract/Makefile.am.include
+endif

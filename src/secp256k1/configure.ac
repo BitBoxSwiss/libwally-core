@@ -159,6 +159,11 @@ AC_ARG_ENABLE(module_whitelist,
     [enable_module_whitelist=$enableval],
     [enable_module_whitelist=no])
 
+AC_ARG_ENABLE(module_ecdsa_sign_to_contract,
+    AS_HELP_STRING([--enable-module-ecdsa-sign-to-contract],[enable ECDSA sign-to-contract module [default=no]]),
+    [enable_module_ecdsa_sign_to_contract=$enableval],
+    [enable_module_ecdsa_sign_to_contract=no])
+
 AC_ARG_ENABLE(external_default_callbacks,
     AS_HELP_STRING([--enable-external-default-callbacks],[enable external default callback functions [default=no]]),
     [use_external_default_callbacks=$enableval],
@@ -587,6 +592,10 @@ if test x"$enable_module_surjectionproof" = x"yes"; then
   AC_DEFINE(ENABLE_MODULE_SURJECTIONPROOF, 1, [Define this symbol to enable the surjection proof module])
 fi
 
+if test x"$enable_module_ecdsa_sign_to_contract" = x"yes"; then
+  AC_DEFINE(ENABLE_MODULE_ECDSA_SIGN_TO_CONTRACT, 1, [Define this symbol to enable the ECDSA sign-to-contract module])
+fi
+
 AC_C_BIGENDIAN()
 
 if test x"$use_external_asm" = x"yes"; then
@@ -612,6 +621,7 @@ if test x"$enable_experimental" = x"yes"; then
   AC_MSG_NOTICE([Building surjection proof module: $enable_module_surjectionproof])
   AC_MSG_NOTICE([Building schnorrsig module: $enable_module_schnorrsig])
   AC_MSG_NOTICE([Building MuSig module: $enable_module_musig])
+  AC_MSG_NOTICE([Building ECDSA sign-to-contract module: $enable_module_ecdsa_sign_to_contract])
   AC_MSG_NOTICE([******])
 
 
@@ -638,6 +648,9 @@ if test x"$enable_experimental" = x"yes"; then
 else
   if test x"$enable_module_ecdh" = x"yes"; then
     AC_MSG_ERROR([ECDH module is experimental. Use --enable-experimental to allow.])
+  fi
+  if test x"$enable_module_ecdsa_sign_to_contract" = x"yes"; then
+    AC_MSG_ERROR([ECDA sign-to-contract module module is experimental. Use --enable-experimental to allow.])
   fi
   if test x"$enable_module_schnorrsig" = x"yes"; then
     AC_MSG_ERROR([schnorrsig module is experimental. Use --enable-experimental to allow.])
@@ -681,6 +694,7 @@ AM_CONDITIONAL([ENABLE_MODULE_RECOVERY], [test x"$enable_module_recovery" = x"ye
 AM_CONDITIONAL([ENABLE_MODULE_GENERATOR], [test x"$enable_module_generator" = x"yes"])
 AM_CONDITIONAL([ENABLE_MODULE_RANGEPROOF], [test x"$enable_module_rangeproof" = x"yes"])
 AM_CONDITIONAL([ENABLE_MODULE_WHITELIST], [test x"$enable_module_whitelist" = x"yes"])
+AM_CONDITIONAL([ENABLE_MODULE_ECDSA_SIGN_TO_CONTRACT], [test x"$enable_module_ecdsa_sign_to_contract" = x"yes"])
 AM_CONDITIONAL([USE_JNI], [test x"$use_jni" = x"yes"])
 AM_CONDITIONAL([USE_EXTERNAL_ASM], [test x"$use_external_asm" = x"yes"])
 AM_CONDITIONAL([USE_ASM_ARM], [test x"$set_asm" = x"arm"])
@@ -705,16 +719,17 @@ echo "  with coverage           = $enable_coverage"
 echo "  module ecdh             = $enable_module_ecdh"
 echo "  module recovery         = $enable_module_recovery"
 echo "  module schnorrsig       = $enable_module_schnorrsig"
+echo "  module ecdsa sign-to-contract = $enable_module_ecdsa_sign_to_contract"
 echo
-echo "  asm                     = $set_asm"
-echo "  bignum                  = $set_bignum"
-echo "  field                   = $set_field"
-echo "  scalar                  = $set_scalar"
-echo "  ecmult window size      = $set_ecmult_window"
-echo "  ecmult gen prec. bits   = $set_ecmult_gen_precision"
+echo "  asm                           = $set_asm"
+echo "  bignum                        = $set_bignum"
+echo "  field                         = $set_field"
+echo "  scalar                        = $set_scalar"
+echo "  ecmult window size            = $set_ecmult_window"
+echo "  ecmult gen prec. bits         = $set_ecmult_gen_precision"
 echo
-echo "  CC                      = $CC"
-echo "  CFLAGS                  = $CFLAGS"
-echo "  CPPFLAGS                = $CPPFLAGS"
-echo "  LDFLAGS                 = $LDFLAGS"
+echo "  CC                            = $CC"
+echo "  CFLAGS                        = $CFLAGS"
+echo "  CPPFLAGS                      = $CPPFLAGS"
+echo "  LDFLAGS                       = $LDFLAGS"
 echo
