@@ -398,7 +398,7 @@ int wally_s2c_sig_from_bytes(const unsigned char *priv_key, size_t priv_key_len,
     if (!ctx)
         return WALLY_ENOMEM;
 
-    if (!secp256k1_ecdsa_s2c_sign(ctx, &sig_secp, &opening_secp, bytes, priv_key, s2c_data)) {
+    if (!secp256k1_ecdsa_s2c_sign(ctx, &sig_secp, &opening_secp, bytes, priv_key, s2c_data, NULL)) {
         wally_clear_2(&sig_secp, sizeof(sig_secp), &opening_secp, sizeof(opening_secp));
         if (!secp256k1_ec_seckey_verify(ctx, priv_key))
             return WALLY_EINVAL; /* invalid priv_key */

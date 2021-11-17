@@ -82,7 +82,7 @@ WALLY_CORE_API int wally_ae_sig_from_bytes(
     if (!ctx)
         return WALLY_ENOMEM;
 
-    ok = secp256k1_anti_exfil_sign(ctx, &sig_secp, bytes, priv_key, entropy) &&
+    ok = secp256k1_anti_exfil_sign(ctx, &sig_secp, bytes, priv_key, entropy, NULL) &&
          secp256k1_ecdsa_signature_serialize_compact(ctx, bytes_out, &sig_secp);
 
     wally_clear(&sig_secp, sizeof(sig_secp));
