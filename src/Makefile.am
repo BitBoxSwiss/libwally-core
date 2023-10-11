@@ -138,7 +138,7 @@ libwallycore_la_SOURCES = \
     anti_exfil.c \
     aes.c \
     base58.c \
-    base64.c \
+    base64_b.c \
     bip32.c \
     bip38.c \
     bip39.c \
@@ -147,7 +147,7 @@ libwallycore_la_SOURCES = \
     ecdh.c \
     elements.c \
     blech32.c \
-    hex.c \
+    hex_b.c \
     hmac.c \
     internal.c \
     map.c \
